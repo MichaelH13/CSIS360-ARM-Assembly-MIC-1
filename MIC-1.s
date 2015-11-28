@@ -4,7 +4,22 @@
 
 /* Result */
 .balign 4
-result: .asciz "%s\n"
+result: .asciz "%#.2X\n"
+
+.balign 4
+openMsg: .asciz "Op: %s\n"
+
+.balign 4
+readResult: .asciz "Read in: %d\n"
+
+.balign 4
+flags: .asciz "r"
+
+.balign 4
+data: .skip 4096
+
+.balign 4
+data_size: .word 0
 
 .text
 
@@ -17,20 +32,46 @@ result: .asciz "%s\n"
 main:
 	/* The name of the program to execute will be provided */
 	/* as a command-line parameter. */
- 	ldr r0, =result
- 	ldr r1, [r1]
+	mov r5, lr
+	
+	/*prints "Op: simple (arg number 2)"
+	ldr r0, =openMsg 
+	ldr r1, [r1]
+	add r1, #8
+	bl printf */
+	
+	/* Using fopen: */
+	ldr r1, [r1]
  	add r0, r1, #8
+ 	ldr r1, =flags
  	bl fopen
  	
- 	mov r0, r1
- 	ldr r0, =result
- 	bl printf
+ 	mov r4, r0          /* store FILE in r4 */
+ 	mov r1, r0          /* move FILE to r1 */
+ 	ldr r0, =readResult /* load result into r0 for printf */
+ 	bl printf           /* call printf */
+ 	mov r0, r4          /* put FILE back into r0 */
  	
-/* 	ldr r2, =result */
-/* 	mov r0, r4 			; Counter */
-/* 	ldr r0, =result     ; Printf */
-/* 	bl printf */
-/* 	sub r3, r3, #1	    ; Decrement counter */
+ 	ldr r0, =data       /* store pointer to data in r0 */
+ 	mov r1, #1          /* store 1 in r1 (read chunks of 1 byte) */
+ 	mov r2, #8          /* store 8 in r2 (read 8 chunks of 1 byte) */
+ 	mov r3, r4          /* store FILE in r3, read from FILE */
+ 	bl fread            /* read 8 bytes from FILE into data array */
+ 	
+ 	mov r6, #0          /* counter */
+ 
+ printData:
+    /* Print using printf */
+    ldr r1, =data
+    add r1, r1, r6
+    ldr r1, [r1]
+    ldr r0, =result
+    bl printf 
+    add r6, #1
+    cmp r6, #7
+    bllt printData
+ 	
+ 	mov lr, r5
     
 	bx lr
 	
@@ -53,5 +94,7 @@ main:
 /* External */
 .global printf
 .global fopen
-
+.global read
+.global close
+.global putchar
 
