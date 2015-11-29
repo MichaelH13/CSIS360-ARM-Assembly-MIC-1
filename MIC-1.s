@@ -32,7 +32,7 @@ data_size: .word 0
 main:
 	/* The name of the program to execute will be provided */
 	/* as a command-line parameter. */
-	mov r5, lr
+	mov r12, lr
 	
 	/*prints "Op: simple (arg number 2)"
 	ldr r0, =openMsg 
@@ -54,24 +54,78 @@ main:
  	
  	ldr r0, =data       /* store pointer to data in r0 */
  	mov r1, #1          /* store 1 in r1 (read chunks of 1 byte) */
- 	mov r2, #8          /* store 8 in r2 (read 8 chunks of 1 byte) */
+ 	ldr r2, =4096       /* store 8 in r2 (read 8 chunks of 1 byte) */
  	mov r3, r4          /* store FILE in r3, read from FILE */
  	bl fread            /* read 8 bytes from FILE into data array */
  	
- 	mov r6, #0          /* counter */
- 
+ 	mov r7, r0          /* store # of bytes read in at r7, SP essentially */
+ 	
+ 	mov r6, #0          /* zero-out our counter */
+    
  printData:
     /* Print using printf */
     ldr r1, =data
-    add r1, r1, r6
+    add r1, r6
     ldr r1, [r1]
+    
+    /* trims to just the "right most" byte */
+    lsl r1, r1, #24
+    lsr r1, r1, #24
+    
     ldr r0, =result
-    bl printf 
+    bl printf
     add r6, #1
-    cmp r6, #7
+    cmp r6, r7
     bllt printData
  	
- 	mov lr, r5
+ 	/* r4 is MAR    : Memory Address Register. */
+    
+    /* r5 is MDR    : Memory Data Register. */
+    mov r5, #0
+    
+    /* r6 is PC     : The current Program Counter for our machine. */
+    mov r6, #0      /* PC starts at 0 */
+    
+    /* r6 is MBR    : Memory Byte Register? */
+    /* use later */
+    
+    /* r7 is SP     : Stack Pointer. */
+    /* loaded at time of reading file. */
+    
+    /* r8 is LV     : Link Value. */
+    /* use later */
+    
+    /* r9 is CPP    : Constant Pool Pointer. */
+    /* use later */
+    
+    /* r10 is TOS   : No idea? */
+    /* use later */
+    
+    /* r11 is OPC   : No idea? */
+    /* use later */
+    
+    /* r12 is H     : No idea? */
+    /* use later */
+ 	
+ main1:
+ 
+    /* fetch */
+    ldr r0, =data
+    add r0, r6
+    ldr r0, [r0]
+    
+    add r4, r0, r6      /* store MAR = PC + address_of_data */
+    ldr r5, [r4]        /* store MDR = *MAR */
+    
+    /* trims to just the "right most" byte */
+    lsl r0, r0, #24
+    lsr r0, r0, #24
+    
+    /* decode/execute */
+    
+    
+ 	
+ 	mov lr, r12
     
 	bx lr
 	
@@ -94,7 +148,6 @@ main:
 /* External */
 .global printf
 .global fopen
-.global read
-.global close
-.global putchar
+.global fread
+.global fclose
 
