@@ -7,6 +7,9 @@
 result: .asciz "%#.2X\n"
 
 .balign 4
+here: .asciz "HERE %#.2X\n"
+
+.balign 4
 openMsg: .asciz "Op: %s\n"
 
 .balign 4
@@ -23,16 +26,62 @@ data_size: .word 0
 
 .text
 
-/* Addresses of variables */
+    /* Naming Registers */
+    /* r2 is MAR    : Memory Address Register. */
+    mic1MAR .req r2
+    mov mic1MAR, #0
+    
+    /* r3 is MDR    : Memory Data Register. */
+    mic1MDR .req r3
+    mov mic1MDR, #0
+    
+    /* r4 is PC     : The current Program Counter for our machine. */
+    mic1PC .req r4
+    mov mic1PC, #0      /* PC starts at 0 */
+    
+    /* r5 is MBR    : Memory Byte Register. */
+    mic1MBR .req r5
+    mov mic1MBR, #0
+    
+    /* r6 is MBRU   : Memory Byte Register, unsigned. */
+    mic1MBRU .req r6
+    mov mic1MBRU, #0
+    
+    /* r7 is SP     : Stack Pointer. */
+    /* loaded at time of reading file. */
+    mic1SP .req r7
+    mov mic1SP, #0
+    
+    /* r8 is LV     : Link Value. */
+    mic1LV .req r8
+    mov mic1LV, #0
+    
+    /* r9 is CPP    : Constant Pool Pointer. */
+    mic1CPP .req r9
+    mov mic1CPP, #0
+    
+    /* r10 is TOS   : Top Of Stack. */
+    mic1TOS .req r10
+    mov mic1TOS, #0
+    
+    /* r11 is OPC   : Old PC. */
+    mic1OPC .req r11
+    mov mic1OPC, #0
+    
+    /* r12 is H     : Scratch register for loading when told to. */
+    mic1H .req r12
+    mov mic1H, #0
+
+    /* Addresses of variables */
 
 
-/* Function Delcarations */
+    /* Function Delcarations */
 .global main
 
 main:
 	/* The name of the program to execute will be provided */
 	/* as a command-line parameter. */
-	mov r12, lr
+	push {lr}
 	
 	/*prints "Op: simple (arg number 2)"
 	ldr r0, =openMsg 
@@ -64,70 +113,103 @@ main:
     
  printData:
     /* Print using printf */
-    ldr r1, =data
+    /*ldr r1, =data
     add r1, r6
-    ldr r1, [r1]
-    
-    /* trims to just the "right most" byte */
-    lsl r1, r1, #24
-    lsr r1, r1, #24
+    ldrb r1, [r1]
     
     ldr r0, =result
     bl printf
     add r6, #1
     cmp r6, r7
-    bllt printData
+    bllt printData*/
  	
- 	/* r4 is MAR    : Memory Address Register. */
-    
-    /* r5 is MDR    : Memory Data Register. */
-    mov r5, #0
-    
-    /* r6 is PC     : The current Program Counter for our machine. */
-    mov r6, #0      /* PC starts at 0 */
-    
-    /* r6 is MBR    : Memory Byte Register? */
-    /* use later */
-    
-    /* r7 is SP     : Stack Pointer. */
-    /* loaded at time of reading file. */
-    
-    /* r8 is LV     : Link Value. */
-    /* use later */
-    
-    /* r9 is CPP    : Constant Pool Pointer. */
-    /* use later */
-    
-    /* r10 is TOS   : No idea? */
-    /* use later */
-    
-    /* r11 is OPC   : No idea? */
-    /* use later */
-    
-    /* r12 is H     : No idea? */
-    /* use later */
+ 	/* Make sure we are starting at 0 */
+ 	mov mic1PC, #0
+ 	mov mic1MAR, #0
+ 	mov mic1MBR, #0
  	
  main1:
- 
-    /* fetch */
+    /* load first byte */
+    /*ldr r1, =data
+    add r1, #2
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf*/
+    /**/
+    
+    /* fetch byte instruction. */
     ldr r0, =data
-    add r0, r6
-    ldr r0, [r0]
+    add r0, mic1PC
+    mov mic1MAR, r0
+    ldrb mic1MBR, [mic1MAR]
     
-    add r4, r0, r6      /* store MAR = PC + address_of_data */
-    ldr r5, [r4]        /* store MDR = *MAR */
     
-    /* trims to just the "right most" byte */
-    lsl r0, r0, #24
-    lsr r0, r0, #24
     
     /* decode/execute */
-    
-    
- 	
- 	mov lr, r12
-    
+    cmp mic1MBR, #0x10
+    beq bipush
+    cmp mic1MBR, #0x60
+    beq iadd
+    cmp mic1MBR, #0x00
+    beq nop
+    cmp mic1MBR, #0xA9
+    beq ret
+ 
+ exit:
+ 	pop {lr}
+
 	bx lr
+	
+bipush:
+    ldr r1, =data
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf
+    
+    add mic1PC, #1
+    
+    ldr r1, =data
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf
+    
+    add mic1PC, #1
+    b main1
+
+iadd:
+    ldr r1, =data
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf
+    add mic1PC, #1
+    b main1
+
+nop:
+    ldr r1, =data
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf
+    add mic1PC, #1
+    b main1
+
+ret:
+    ldr r1, =data
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =here
+    bl printf
+    b exit
 	
 	/* Open that file and read it byte-by-byte into an array */
 	/* of bytes that will represent our memory. */
