@@ -31,7 +31,7 @@ here: .asciz "HERE %#.2X\n"
 returnValue: .asciz "%d\n"
 
 .balign 4
-lv: .asciz "LV: %#.4X\n"
+lv: .asciz " mic1LV: %#.4X "
 
 .balign 4
 skipping: .asciz "Skipping: %#.2X\n"
@@ -128,27 +128,9 @@ memory: .skip 4096
     /* Function Delcarations */
 .global main
 
-    ldr r0, =newline
-    _PRINT_R1
     
-    push {r0-r3}
-    mov r3, #0          /* zero-out our counter */
     
-printMemory:
-    /* Print using printf */
-    ldr r1, =memory
-    add r1, r3
-    ldrb r1, [r1]
     
-    ldr r0, =result
-    _PRINT_R1
-    
-    add r3, #1
-    cmp r3, #32
-    bllt printMemory
-    pop {r0-r3}
-    ldr r0, =newline
-    _PRINT_R1
 
 main:
 	/* The name of the program to execute will be provided */
@@ -193,13 +175,37 @@ main:
     /* Skip memory, and LV to set SP. */
     add mic1SP, mic1LV
     
-    /*mov r1, mic1LV
+    mov r1, mic1LV
     ldr r0, =lv
-    _PRINT_R1*/
+    _PRINT_R1
+ 	ldr r1, =newline
+    _PRINT_R1
  	
 main1:
     
     _INC_PC_FETCH
+    
+    
+    ldr r0, =newline
+    _PRINT_R1
+    push {r0-r3}
+    mov r3, mic1PC          /* zero-out our counter */
+    
+printMemory:
+    /* Print using printf */
+    ldr r1, =memory
+    add r1, r3
+    ldrb r1, [r1]
+    
+    ldr r0, =result
+    _PRINT_R1
+    
+    add r3, #1
+    cmp r3, #30
+    bllt printMemory
+    pop {r0-r3}
+    
+    
     
     /* decode/execute */
     cmp mic1MBR, #0x10
@@ -301,13 +307,11 @@ bipush:
     
     b main1
     
-dup:
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
+dup: @NOT TESTED
+    add mic1SP, #4
+    mov mic1MAR, mic1SP
+    mov mic1MDR, mic1TOS
+    _WR_
     
     b main1
 
@@ -594,14 +598,16 @@ pop: @NOT TESTED
     mov mic1TOS, mic1MDR
     b main1
     
-swap:
-    /*print swap*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
+swap: @NOT TESTED
+    sub mic1MAR, mic1SP, #4     @ MAR = SP − 1; rd
+    _RD_
+    mov mic1MAR, mic1SP         @ MAR = SP
+    mov mic1H, mic1MDR          @ H = MDR; wr
+    _WR_
+    mov mic1MDR, mic1TOS        @ MDR = TOS
+    sub mic1MAR, mic1SP, #4     @ MAR = SP − 1; wr
+    _WR_
+    mov mic1TOS, mic1H          @ TOS = H; goto Main1
     b main1
 
 ret:
