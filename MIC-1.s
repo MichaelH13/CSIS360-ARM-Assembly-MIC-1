@@ -4,19 +4,43 @@
 
 /* Result */
 .balign 4
-result: .asciz "%#.2X\n"
+result: .asciz "%#.2X "
+
+.balign 4
+h: .asciz " + mic1H: %#.2X "
+
+.balign 4
+newline: .asciz "\n"
+
+.balign 4
+tos: .asciz " mic1TOS: %#.2X "
+
+.balign 4
+sp: .asciz " micSP: %#.2X "
+
+.balign 4
+mdr: .asciz " mic1MDR: %#.2X "
+
+.balign 4
+mbr: .asciz " mic1MBR: %#.2X "
 
 .balign 4
 here: .asciz "HERE %#.2X\n"
 
 .balign 4
-LV_print: .asciz "LV: %#.2X\n"
+returnValue: .asciz "%d\n"
+
+.balign 4
+lv: .asciz "LV: %#.4X\n"
 
 .balign 4
 skipping: .asciz "Skipping: %#.2X\n"
 
 .balign 4
 openMsg: .asciz "Op: %s\n"
+
+.balign 4
+sbipush: .asciz "\nBipush: %#.8X"
 
 .balign 4
 readResult: .asciz "Read in: %d\n"
@@ -42,7 +66,14 @@ memory: .skip 4096
 .macro _INC_PC_FETCH
     add mic1PC, #1
     ldr r0, =memory
-    add r0, mic1PC
+    add mic1MAR, mic1PC, r0
+    ldrb mic1MBR, [mic1MAR]
+.endm
+
+.macro _PRINT_R1
+    push {r0-r3}
+    bl printf
+    pop {r0-r3}
 .endm
 
     /* Naming Registers */
@@ -97,6 +128,28 @@ memory: .skip 4096
     /* Function Delcarations */
 .global main
 
+    ldr r0, =newline
+    _PRINT_R1
+    
+    push {r0-r3}
+    mov r3, #0          /* zero-out our counter */
+    
+printMemory:
+    /* Print using printf */
+    ldr r1, =memory
+    add r1, r3
+    ldrb r1, [r1]
+    
+    ldr r0, =result
+    _PRINT_R1
+    
+    add r3, #1
+    cmp r3, #32
+    bllt printMemory
+    pop {r0-r3}
+    ldr r0, =newline
+    _PRINT_R1
+
 main:
 	/* The name of the program to execute will be provided */
 	/* as a command-line parameter. */
@@ -114,71 +167,39 @@ main:
  	ldr r1, =flags
  	bl fopen
  	
- 	mov r4, r0          /* store FILE in r4 */
- 	mov r1, r0          /* move FILE to r1 */
- 	ldr r0, =readResult /* load result into r0 for printf */
- 	bl printf           /* call printf */
- 	mov r0, r4          /* put FILE back into r0 */
+ 	mov r4, r0          @store FILE in r4
+ 	ldr r0, =memory     @store pointer to memory in r0
+ 	mov r1, #1          @store 1 in r1 (read chunks of 1 byte)
+ 	ldr r2, =4096       @store 8 in r2 (read up to 4096 chunks of 1 byte)
+ 	mov r3, r4          @store FILE in r3, read from FILE
+ 	bl fread            @read bytes from FILE into memory array
  	
- 	ldr r0, =memory       /* store pointer to memory in r0 */
- 	mov r1, #1          /* store 1 in r1 (read chunks of 1 byte) */
- 	ldr r2, =4096       /* store 8 in r2 (read 8 chunks of 1 byte) */
- 	mov r3, r4          /* store FILE in r3, read from FILE */
- 	bl fread            /* read 8 bytes from FILE into memory array */
- 	
- 	mov r7, r0          /* store # of bytes read in at r7, SP essentially */
- 	
- 	mov r6, #0          /* zero-out our counter */
-    
- printMemory:
-    /* Print using printf */
-    /*ldr r1, =memory
-    add r1, r6
-    ldrb r1, [r1]
-    
-    ldr r0, =result
-    bl printf
-    add r6, #1
-    cmp r6, r7
-    bllt printMemory*/
+ 	mov mic1SP, r0          @store # of bytes read in mic1SP.
  	
  	/* Make sure we are starting at 0 */
  	mov mic1PC, #0
  	mov mic1MAR, #0
  	mov mic1MBR, #0
+ 	mov mic1TOS, #0
  	
  	/* get LV from program. */
  	ldr r0, =memory
     add mic1MAR, mic1PC, r0
     ldrb mic1LV, [mic1MAR]
-    add mic1PC, #1
-    
-    ldr r0, =memory
-    add mic1MAR, mic1PC, r0
-    ldrb mic1MBR, [mic1MAR]
+    _INC_PC_FETCH
     lsl mic1LV, mic1LV, #8
     orr mic1LV, mic1MBR
     
-    mov r1, mic1LV
+    /* Skip memory, and LV to set SP. */
+    add mic1SP, mic1LV
     
-    ldr r0, =LV_print
-    bl printf
+    /*mov r1, mic1LV
+    ldr r0, =lv
+    _PRINT_R1*/
  	
- main1:
-    /* load first byte */
-    /*ldr r1, =memory
-    add r1, #2
-    add r1, mic1PC
-    ldrb r1, [r1]
+main1:
     
-    ldr r0, =here
-    bl printf*/
-    /**/
-    
-    /* fetch byte instruction. */
-    ldr r0, =memory
-    add mic1MAR, mic1PC, r0
-    ldrb mic1MBR, [mic1MAR]
+    _INC_PC_FETCH
     
     /* decode/execute */
     cmp mic1MBR, #0x10
@@ -218,7 +239,8 @@ main:
     cmp mic1MBR, #0x5F
     beq swap
     
- skip:
+skip:
+    /* default, skip and inform console */
     ldr r1, =memory
     add r1, mic1PC
     ldrb r1, [r1]
@@ -226,38 +248,57 @@ main:
     ldr r0, =skipping
     bl printf
     
-    add mic1PC, #1
     b main1
  
- end:
- 	pop {lr}
- 	/* print TOS, then exit
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf */
+end:
+    pop {lr}
 	bx lr
 	
-bipush:
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
+bipush: 
+                                @SP = MAR = SP + 1
+    /*add mic1SP, mic1SP, #4
+    add mic1MAR, mic1SP, #0*/
     
-    ldr r0, =here
-    bl printf
+    /*_INC_PC_FETCH*/               @PC = PC + 1; fetch
     
-    add mic1PC, #1
+    /* ldrsb mic1MDR, [mic1MAR] */
+    /*ldrb mic1MDR, [mic1MAR]
+    mov mic1TOS, mic1MDR*/
     
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
+    /*ldr r0, =sbipush
+    mov r1, mic1TOS
+    _PRINT_R1
     
-    ldr r0, =here
-    bl printf
+    ldr r0, =mdr
+    mov r1, mic1MDR
+    _PRINT_R1
     
-    add mic1PC, #1
+    ldr r0, =sp
+    mov r1, mic1SP
+    _PRINT_R1*/
+    
+    mov mic1MAR, mic1SP
+    add mic1SP, #4
+    _INC_PC_FETCH
+    
+    /* mov mic1MDR, mic1MBR */        @MDR = TOS = MBR; wr;
+    ldrsb mic1MDR, [mic1MAR]
+    mov mic1TOS, mic1MDR
+    mov mic1MAR, mic1SP
+    _WR_
+    
+    /*ldr r0, =sbipush
+    mov r1, mic1TOS
+    _PRINT_R1
+    
+    ldr r0, =mdr
+    mov r1, mic1MDR
+    _PRINT_R1
+    
+    ldr r0, =sp
+    mov r1, mic1SP
+    _PRINT_R1*/
+    
     b main1
     
 dup:
@@ -268,7 +309,6 @@ dup:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1
 
 goto:
@@ -280,7 +320,7 @@ goto:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*offset*/
     ldr r1, =memory
@@ -290,7 +330,7 @@ goto:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     ldr r1, =memory
     add r1, mic1PC
@@ -299,18 +339,18 @@ goto:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1
     
 iadd:
-     sub mic1SP, mic1SP, #4        @MAR = SP = SP - 1
-     mov mic1MAR, mic1SP
-     mov mic1H, mic1TOS            @mic1H = TOS
-     _RD_                          @TOS = MDR + H
-     add mic1TOS, mic1MDR, mic1H
-     mov mic1MDR, mic1TOS          @ MDR = TOS
-     _WR_
-     b main1
+    sub mic1SP, #4                  @MAR = SP = SP - 1
+    mov mic1MAR, mic1SP
+    _RD_
+    mov mic1H, mic1TOS              @mic1H = TOS
+    
+    add mic1TOS, mic1MDR, mic1H     @MDR = TOS = MDR + H
+    mov mic1MDR, mic1TOS            @MDR = TOS
+    _WR_                            @wr; goto Main1
+    b main1
 
 iand:
     ldr r1, =memory
@@ -319,7 +359,6 @@ iand:
     
     ldr r0, =here
     bl printf
-    add mic1PC, #1
     b main1
     
 ifeq:
@@ -331,7 +370,7 @@ ifeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*offset*/
     ldr r1, =memory
@@ -341,7 +380,7 @@ ifeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     ldr r1, =memory
     add r1, mic1PC
@@ -350,7 +389,6 @@ ifeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1
     
 iflt:
@@ -362,7 +400,7 @@ iflt:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print offset*/
     ldr r1, =memory
@@ -372,7 +410,7 @@ iflt:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     ldr r1, =memory
     add r1, mic1PC
@@ -381,7 +419,6 @@ iflt:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1
     
 if_icmpeq:
@@ -393,7 +430,7 @@ if_icmpeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print offset*/
     ldr r1, =memory
@@ -403,7 +440,7 @@ if_icmpeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     ldr r1, =memory
     add r1, mic1PC
@@ -412,7 +449,6 @@ if_icmpeq:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1   
     
 iinc:
@@ -424,7 +460,7 @@ iinc:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print varnum*/
     ldr r1, =memory
@@ -434,7 +470,7 @@ iinc:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print const*/
     ldr r1, =memory
@@ -444,7 +480,6 @@ iinc:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
     b main1
     
 iload:
@@ -456,7 +491,7 @@ iload:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print varnum*/
     ldr r1, =memory
@@ -465,8 +500,6 @@ iload:
     
     ldr r0, =here
     bl printf
-    
-    add mic1PC, #1
 
     b main1
     
@@ -479,7 +512,7 @@ jsr:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print disp*/
     ldr r1, =memory
@@ -489,7 +522,7 @@ jsr:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     ldr r1, =memory
     add r1, mic1PC
@@ -497,8 +530,6 @@ jsr:
     
     ldr r0, =here
     bl printf
-    
-    add mic1PC, #1
     
     b main1
 
@@ -510,7 +541,7 @@ ior:
     
     ldr r0, =here
     bl printf
-    add mic1PC, #1
+
     b main1
     
 istore:
@@ -522,7 +553,7 @@ istore:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
+    _INC_PC_FETCH
     
     /*print varnum*/
     ldr r1, =memory
@@ -532,8 +563,6 @@ istore:
     ldr r0, =here
     bl printf
     
-    add mic1PC, #1
-
     b main1
     
 isub:
@@ -544,7 +573,7 @@ isub:
     
     ldr r0, =here
     bl printf
-    add mic1PC, #1
+    
     b main1
     
 nop:
@@ -555,18 +584,14 @@ nop:
     
     ldr r0, =here
     bl printf
-    add mic1PC, #1
+    
     b main1
     
-pop:
-    /*print pop*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    add mic1PC, #1
+pop: @NOT TESTED
+    sub mic1SP, #4
+    mov mic1MAR, mic1SP
+    _RD_
+    mov mic1TOS, mic1MDR
     b main1
     
 swap:
@@ -577,16 +602,12 @@ swap:
     
     ldr r0, =here
     bl printf
-    add mic1PC, #1
     b main1
 
 ret:
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
+    mov r1, mic1TOS
+    ldr r0, =returnValue
+    _PRINT_R1
     b end
 	
 	/* Open that file and read it byte-by-byte into an array */
