@@ -10,6 +10,12 @@ result: .asciz "%#.2X\n"
 here: .asciz "HERE %#.2X\n"
 
 .balign 4
+LV_print: .asciz "LV: %#.2X\n"
+
+.balign 4
+skipping: .asciz "Skipping: %#.2X\n"
+
+.balign 4
 openMsg: .asciz "Op: %s\n"
 
 .balign 4
@@ -141,6 +147,23 @@ main:
  	mov mic1MAR, #0
  	mov mic1MBR, #0
  	
+ 	/* get LV from program. */
+ 	ldr r0, =memory
+    add mic1MAR, mic1PC, r0
+    ldrb mic1LV, [mic1MAR]
+    add mic1PC, #1
+    
+    ldr r0, =memory
+    add mic1MAR, mic1PC, r0
+    ldrb mic1MBR, [mic1MAR]
+    lsl mic1LV, mic1LV, #8
+    orr mic1LV, mic1MBR
+    
+    mov r1, mic1LV
+    
+    ldr r0, =LV_print
+    bl printf
+ 	
  main1:
     /* load first byte */
     /*ldr r1, =memory
@@ -154,8 +177,7 @@ main:
     
     /* fetch byte instruction. */
     ldr r0, =memory
-    add r0, mic1PC
-    mov mic1MAR, r0
+    add mic1MAR, mic1PC, r0
     ldrb mic1MBR, [mic1MAR]
     
     /* decode/execute */
@@ -195,6 +217,17 @@ main:
     beq pop
     cmp mic1MBR, #0x5F
     beq swap
+    
+ skip:
+    ldr r1, =memory
+    add r1, mic1PC
+    ldrb r1, [r1]
+    
+    ldr r0, =skipping
+    bl printf
+    
+    add mic1PC, #1
+    b main1
  
  end:
  	pop {lr}
