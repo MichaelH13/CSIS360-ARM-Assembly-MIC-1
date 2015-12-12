@@ -295,6 +295,8 @@ skip_nl2:
     beq iadd
     cmp mic1MBRU, #0x68
     beq imul
+    cmp mic1MBRU, #0x6C
+    beq idiv
     cmp mic1MBRU, #0x00
     beq nop
     cmp mic1MBRU, #0xA9
@@ -359,17 +361,8 @@ dup:
     _WR_
     
     b main1
-
-goto: @TODO NOT TESTED
-    sub mic1OPC, mic1PC, #1
-    _INC_PC_FETCH
-    mov mic1H, mic1MBR, lsl #8
-    orr mic1H, mic1MBR, mic1H
-    add mic1PC, mic1OPC, mic1H
-    _INC_PC_FETCH
-    b main1
     
-iadd:
+iadd: @TODO NOT TESTED
     sub mic1MAR, mic1SP, #4         @MAR = SP = SP - 1
     mov mic1SP, mic1MAR
     _RD_
@@ -380,19 +373,49 @@ iadd:
     _WR_                            @wr; goto Main1
     b main1
     
+isub: @TODO NOT TESTED
+    sub mic1MAR, mic1SP, #4         @MAR = SP = SP - 1
+    mov mic1SP, mic1MAR
+    _RD_
+    mov mic1H, mic1TOS              @H = TOS
+    
+    sub mic1TOS, mic1MDR, mic1H     @TOS = MDR - H
+    mov mic1MDR, mic1TOS            @MDR = TOS
+    _WR_                            @wr; goto Main1
+    b main1
+    
 imul: @TODO NOT TESTED
-    sub mic1SP, #4                  @MAR = SP = SP - 1
+    sub mic1SP, mic1SP, #4          @MAR = SP = SP - 1
     mov mic1MAR, mic1SP
     _RD_
-    mov mic1H, mic1TOS              @mic1H = TOS
+    mov mic1H, mic1TOS              @H = TOS
     
     mul mic1TOS, mic1MDR, mic1H     @MDR = TOS = MDR * H
     mov mic1MDR, mic1TOS            @MDR = TOS
     _WR_                            @wr; goto Main1
     b main1
+    
+idiv: @TODO NOT TESTED
+    sub mic1SP, mic1SP, #4          @MAR = SP = SP - 1
+    mov mic1MAR, mic1SP
+    _RD_
+    mov mic1H, mic1TOS              @H = TOS
+    
+    mov r0, mic1H
+    mov r1, mic1MDR
+    
+    push {r2-r3}
+    bl __aeabi_uidiv
+    pop {r2-r3}
+    
+    mov mic1TOS, r0
+    mov mic1MDR, mic1TOS            @MDR = TOS
+    
+    _WR_                            @wr; goto Main1
+    b main1
 
 iand: @TODO NOT TESTED
-    sub mic1SP, #4                  @MAR = SP = SP - 1
+    sub mic1SP, mic1SP, #4                  @MAR = SP = SP - 1
     mov mic1MAR, mic1SP
     _RD_
     mov mic1H, mic1TOS              @mic1H = TOS
@@ -401,45 +424,57 @@ iand: @TODO NOT TESTED
     mov mic1MDR, mic1TOS            @MDR = TOS
     _WR_   
     b main1
-    
-ifeq: @TODO NOT TESTED
-    sub mic1SP, #1
+
+ior: @TODO NOT TESTED
+    sub mic1SP, mic1SP, #4          @MAR = SP = SP - 1
     mov mic1MAR, mic1SP
     _RD_
-    mov mic1OPC, mic1TOS
-    mov mic1TOS, mic1MDR
+    mov mic1H, mic1TOS              @mic1H = TOS
+    
+    orr mic1TOS, mic1MDR, mic1H     @MDR = TOS = MDR | H
+    mov mic1MDR, mic1TOS            @MDR = TOS
+    _WR_   
+    b main1
+
+goto: 
+    sub mic1OPC, mic1PC, #1         @OPC = PC - 1
+goto2:
+    _INC_PC_FETCH                   @PC = PC + 1; fetch
+    mov mic1H, mic1MBRU, lsl #8      @H = MBR << 8;
+    _INC_PC_FETCH
+    orr mic1H, mic1MBRU, mic1H      @H = MBRU | H
+    add mic1PC, mic1OPC, mic1H      @PC = OPC + H
+    b main1
+    
+ifeq:
+    sub mic1SP, mic1SP, #4          @MAR = SP = SP - 1; rd
+    mov mic1MAR, mic1SP
+    _RD_
+    
+    mov mic1OPC, mic1TOS            @OPC = TOS
+    mov mic1TOS, mic1MDR            @TOS = MDR
     cmp mic1OPC, #0
     beq T
     b F
     
 iflt:
-    /*print iflt*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
+    sub mic1SP, mic1SP, #4      @MAR = SP = SP - 1; rd
+    mov mic1MAR, mic1SP
+    _RD_
     
-    ldr r0, =here
-    bl printf
+    mov mic1OPC, mic1TOS        @OPC = TOS
+    mov mic1TOS, mic1MDR        @TOS = MDR
+    cmp mic1OPC, #0
+    blt T
+    b F
     
+T:
+    sub mic1OPC, mic1PC, #1     @OPC = PC - 1; goto goto2
+    b goto2
+    
+F:
     _INC_PC_FETCH
-    
-    /*print offset*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
     _INC_PC_FETCH
-    
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
     b main1
     
 if_icmpeq:
@@ -472,7 +507,7 @@ if_icmpeq:
     
     b main1   
     
-iinc: @TODO NOT TESTED
+iinc:
     _INC_PC_FETCH
     mov mic1H, mic1LV               @H = LV
     add mic1MAR, mic1MBRU, mic1H    @MAR = MBRU + H; rd
@@ -483,22 +518,11 @@ iinc: @TODO NOT TESTED
     
     mov mic1H, mic1MDR              @H = MDR
     
-    
     @_INC_PC_FETCH                   @PC = PC + 1; fetch
     add mic1MDR, mic1H, mic1MBR     @MDR = MBR + H; wr; goto main1
     
     pop {mic1MAR}
     _WR_
-    b main1
-    
-T: @TODO NOT TESTED
-    sub mic1PC, #1
-    mov mic1OPC, mic1PC
-    b goto
-    
-F: @TODO NOT TESTED
-    _INC_PC_FETCH
-    _INC_PC_FETCH
     b main1
     
 jsr:
@@ -529,17 +553,6 @@ jsr:
     ldr r0, =here
     bl printf
     
-    b main1
-
-ior:
-    /*print ior*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-
     b main1
     
 iload: @TODO NOT TESTED
@@ -577,25 +590,7 @@ istore: @TODO NOT TESTED
     
     b main1
     
-isub:
-    /*print isub*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    b main1
-    
 nop:
-    /*print nop
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf*/
     
     b main1
     
@@ -645,4 +640,4 @@ ret:
 .global fopen
 .global fread
 .global fclose
-
+.global __aeabi_uidiv
