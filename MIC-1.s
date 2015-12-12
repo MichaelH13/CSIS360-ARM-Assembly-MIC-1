@@ -338,6 +338,9 @@ skip:
     b main1
  
 end:
+    mov r1, mic1TOS
+    ldr r0, =returnValue
+    _PRINT_R1
     pop {lr}
 	bx lr
 	
@@ -440,9 +443,9 @@ goto:
     sub mic1OPC, mic1PC, #1         @OPC = PC - 1
 goto2:
     _INC_PC_FETCH                   @PC = PC + 1; fetch
-    mov mic1H, mic1MBRU, lsl #8      @H = MBR << 8;
+    mov mic1H, mic1MBR, lsl #8      @H = MBR << 8;
     _INC_PC_FETCH
-    orr mic1H, mic1MBRU, mic1H      @H = MBRU | H
+    orr mic1H, mic1MBR, mic1H       @H = MBRU | H
     add mic1PC, mic1OPC, mic1H      @PC = OPC + H
     b main1
     
@@ -478,34 +481,19 @@ F:
     b main1
     
 if_icmpeq:
-    /*print if_icmpeq*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
+    sub mic1MAR, mic1SP, #4     @MAR = SP = SP - 1; rd
+    mov mic1SP, mic1MAR         
+    _RD_
     
-    ldr r0, =here
-    bl printf
-    
-    _INC_PC_FETCH
-    
-    /*print offset*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    _INC_PC_FETCH
-    
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    b main1   
+    sub mic1MAR, mic1SP, #4     @MAR = SP = SP - 1
+    mov mic1SP, mic1MAR 
+    mov mic1H, mic1MDR
+    _RD_
+    mov mic1OPC, mic1TOS
+    mov mic1TOS, mic1MDR
+    cmp mic1OPC, mic1H
+    beq T
+    b F
     
 iinc:
     _INC_PC_FETCH
@@ -525,37 +513,7 @@ iinc:
     _WR_
     b main1
     
-jsr:
-    /*print jsr*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    _INC_PC_FETCH
-    
-    /*print disp*/
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    _INC_PC_FETCH
-    
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
-    ldr r0, =here
-    bl printf
-    
-    b main1
-    
-iload: @TODO NOT TESTED
+iload: 
     _INC_PC_FETCH
     lsl mic1MBRU, mic1MBRU, #2      @ Change to bytes instead of words
     mov mic1H, mic1LV               @ H = LV
@@ -563,15 +521,14 @@ iload: @TODO NOT TESTED
     add mic1MAR, mic1MBRU, mic1H    @ MAR = MBRU + H; rd
     _RD_
     
-    add mic1MAR, mic1SP, #4         @ MAR = SP = SP + 1;
+    add mic1MAR, mic1SP, #4         @ MAR = SP = SP + 1; wr
     mov mic1SP, mic1MAR
-    @_INC_PC_FETCH                   @ PC = PC + 1; fetch; wr
     _WR_
     mov mic1TOS, mic1MDR            @ TOS = MDR; goto Main1
     
     b main1
     
-istore: @TODO NOT TESTED
+istore: 
     _INC_PC_FETCH
     
     lsl mic1MBRU, mic1MBRU, #2      @ Change to bytes instead of words
@@ -583,7 +540,6 @@ istore: @TODO NOT TESTED
     
     sub mic1MAR, mic1SP, #4         @ SP = MAR = SP − 1; rd
     mov mic1SP, mic1MAR
-    @_INC_PC_FETCH                   @ PC = PC + 1; fetch
     _RD_
     
     mov mic1TOS, mic1MDR            @ TOS = MDR; goto Main1
@@ -591,7 +547,6 @@ istore: @TODO NOT TESTED
     b main1
     
 nop:
-    
     b main1
     
 pop: 
@@ -612,28 +567,74 @@ swap:
     _WR_
     mov mic1TOS, mic1H          @ TOS = H; goto Main1
     b main1
-
+    
+jsr:
+    _INC_PC_FETCH                   @Get MBRU
+    lsl mic1MBRU, mic1MBRU, #2      @Multiply MBRU by 4
+    
+    add mic1SP, mic1MBRU, #4        @SP = SP + MBRU + 1
+    mov mic1MDR, mic1CPP            @MDR = CPP
+    
+    mov mic1CPP, mic1SP             @MAR = CPP = SP; wr
+    mov mic1MAR, mic1SP             
+    _WR_
+    
+    add mic1MDR, mic1PC, #3         @MDR = PC + 4
+    
+    add mic1SP, mic1SP, #4          @MAR = SP = SP + 1; wr
+    mov mic1MAR, mic1SP
+    _WR_
+    
+    mov mic1MDR, mic1LV             @MDR = LV
+    
+    add mic1SP, mic1SP, #4          @MAR = SP = SP + 1; wr
+    mov mic1MAR, mic1SP
+    _WR_
+    
+    sub mic1LV, mic1SP, #2          @LV = SP - 2 - MBRU
+    sub mic1LV, mic1LV, mic1MBRU
+    _INC_PC_FETCH                   @PC = PC + 1; fetch
+                                    @NOP
+    sub mic1LV, mic1LV, mic1MBRU    @LV = LV - MBRU
+    _INC_PC_FETCH                   @PC = PC + 1; fetch
+    
+    mov mic1H, mic1MBR, lsl #8      @H = MBR << 8
+    
+    _INC_PC_FETCH                   @PC = PC + 1; fetch
+                                    @NOP
+    orr mic1MBRU, mic1H, mic1MBRU   @PC = PC - 4 + (H OR MBRU)
+    add mic1PC, mic1PC, mic1MBRU    
+    sub mic1PC, mic1PC, #4
+    
+    b main1
+    
 ret:
-    mov r1, mic1TOS
-    ldr r0, =returnValue
-    _PRINT_R1
-    b end
-	
-	/* Open that file and read it byte-by-byte into an array */
-	/* of bytes that will represent our memory. */
-	
-	/* The array should be larger than the program as it will */
-	/* need to hold the call-stack for any methods as well. */
-	
-	/* First two bytes in the file is the number of local */
-	/* variables for "main". That value determines where to */
-	/* set the initial value of the stack pointer (SP) relative */
-	/* to the local variable base pointer (LV). LV should point */
-	/* to the index in the byte-array just beyond the last byte */
-	/* of the program code. You need to compose a 16-bit value */
-	/* for LV from these first two bytes (see below). */
-	/* The first two bytes of the file are not part of the code. */
-
+    cmp mic1CPP, #0
+    beq end
+    
+    mov mic1MAR, mic1CPP        @MAR = CPP; rd
+    _RD_
+                                @NOP
+    mov mic1CPP, mic1MDR        @CPP = MDR
+    
+    add mic1MAR, mic1MAR, #1    @MAR = MAR + 1; rd
+    _RD_
+                                @NOP
+    mov mic1PC, mic1MDR         @PC = MDR; fetch
+    ldrb mic1MBRU, [mic1MAR]    @fetching
+    ldrsb mic1MBR, [mic1MAR]    @fetching
+    
+    add mic1MAR, mic1MAR, #1    @MAR = MAR + 1; rd
+    _RD_
+    
+    mov mic1MAR, mic1LV         @SP = MAR = LV
+    mov mic1SP, mic1LV  
+    
+    mov mic1LV, mic1MDR         @LV = MDR
+    mov mic1MDR, mic1TOS        @MDR = TOS; wr
+    _WR_
+    
+    b main1
 
 /* External */
 .global printf
