@@ -22,7 +22,7 @@ newline: .asciz "\n"
 tos: .asciz " mic1TOS: %#.2X "
 
 .balign 4
-cpp: .asciz " mic1CPP: %#.2X "
+cpp: .asciz " mic1LR (CPP): %#.2X "
 
 .balign 4
 sp: .asciz " mic1SP: %#.2X "
@@ -32,6 +32,9 @@ instructions: .asciz " Instructions: %#.8X "
 
 .balign 4
 mdr: .asciz " mic1MDR: %#.2X "
+
+.balign 4
+opc: .asciz " mic1OPC: %#.2X "
 
 .balign 4
 pc: .asciz " mic1PC: %#.2X "
@@ -82,10 +85,31 @@ old_lr: .asciz "\nold_lr: %d\n"
 flags: .asciz "r"
 
 .balign 4
+smdr: .asciz " MDR: %#.2X "
+
+.balign 4
 filename: .asciz "loadstore"
 
 .balign 4
-push_ret_pc: .asciz "\npush_ret_pc: %d\n"
+push_ret_pc: .asciz "\npush_ret_pc: %d"
+
+.balign 4
+push_ret_lv: .asciz "\npush_ret_link_ptr: %d"
+
+.balign 4
+set_new_link_ptr: .asciz "\nset_new_link_ptr: %d"
+
+.balign 4
+push_old_lv: .asciz "\npush_old_lv: %d"
+
+.balign 4
+set_new_lv: .asciz "\nset_new_lv: %d"
+
+.balign 4
+get_old_link_pointer: .asciz "\nget_old_link_pointer: %d"
+
+.balign 4
+restore_cpp: .asciz "\nrestore_old_link_ptr: %d"
 
 .balign 4
 memory: .skip 4096
@@ -114,6 +138,36 @@ memory: .skip 4096
     push {r0-r3}
     bl printf
     pop {r0-r3}
+.endm
+
+.macro _PRINT_STATE
+    
+    ldr r0, =newline
+    _PRINT_R1
+    
+    mov r1, mic1PC
+    ldr r0, =pc
+    _PRINT_R1
+    
+    mov r1, mic1MBRU
+    ldr r0, =mbru
+    _PRINT_R1
+    
+    mov r1, mic1SP
+    ldr r0, =sp
+    _PRINT_R1
+    
+    mov r1, mic1CPP
+    ldr r0, =cpp
+    _PRINT_R1
+    
+    mov r1, mic1OPC
+    ldr r0, =opc
+    _PRINT_R1
+    
+    mov r1, mic1MDR
+    ldr r0, =mdr
+    _PRINT_R1
 .endm
 
     /* Naming Registers */
@@ -197,13 +251,13 @@ main:
  	bl fread            @read bytes from FILE into memory array
  	
  	mov mic1LV, r0      @store # of bytes read in mic1SP.
- 	push {r0}           @store # of bytes read on stack from r0.
  	
  	/* Make sure we are starting at 0 */
  	mov mic1PC, #0
  	mov mic1MAR, #0
  	mov mic1MBR, #0
  	mov mic1TOS, #0
+    mov mic1CPP, #0
  	
  	/* get LV from program. */
  	ldr r0, =memory
@@ -214,54 +268,13 @@ main:
     orr mic1SP, mic1MBRU
     lsl mic1SP, mic1SP, #2
     
-    mov r1, mic1SP
-    ldr r0, =lv
-    _PRINT_R1
- 	ldr r0, =newline
-    _PRINT_R1
-    
     add mic1SP, mic1SP, mic1LV      @Skip LV bytes, program bytes to get SP
     sub mic1SP, mic1SP, #4
-    mov mic1CPP, #0
-    
-    
-    ldr r1, =memory
-    ldr r0, =mem
-    _PRINT_R1
-    ldr r0, =newline
-    _PRINT_R1
-    
-    mov r1, mic1LV
-    ldr r0, =lv
-    _PRINT_R1
-    ldr r0, =newline
-    _PRINT_R1
-    
-    pop {r0}
-    
-    mov r1, r0
-    ldr r0, =instructions
-    _PRINT_R1
-    ldr r0, =newline
-    _PRINT_R1
-    
-    mov r1, mic1SP
-    ldr r0, =sp
-    _PRINT_R1
- 	ldr r0, =newline
-    _PRINT_R1
-    
-    mov r1, mic1PC
-    ldr r0, =pc
-    _PRINT_R1
- 	ldr r0, =newline
-    _PRINT_R1
     
 main1:
-    
     _INC_PC_FETCH
     
-    
+    /*
     ldr r0, =newline
     _PRINT_R1
     push {r0-r3}
@@ -289,7 +302,6 @@ skip_nl1:
     
 skip_nl2:
     
-    /* Print using printf */
     ldr r1, =memory
     add r1, r3
     ldrb r1, [r1]
@@ -304,6 +316,7 @@ skip_nl2:
     
  	ldr r0, =newline
     _PRINT_R1
+    */
     
 branch_table:
     /* decode/execute */
@@ -349,13 +362,10 @@ branch_table:
     beq swap
     
 skip:
-    /* default, skip and inform console */
-    ldr r1, =memory
-    add r1, mic1PC
-    ldrb r1, [r1]
-    
+    /* default, skip and inform console 
+    mov r1, mic1MBRU
     ldr r0, =skipping
-    bl printf
+    _PRINT_R1*/
     
     b main1
  
@@ -599,16 +609,13 @@ jsr:
     
     mov mic1MDR, mic1CPP            @jsr2 MDR = CPP
     
-    
     mov mic1CPP, mic1SP             @jsr3 MAR = CPP = SP; wr
-    mov mic1MAR, mic1CPP             
+    mov mic1MAR, mic1CPP        
     _WR_
+    
     
     add mic1MDR, mic1PC, #4         @jsr4 MDR = PC + 4
     
-    mov r1, mic1MDR
-    ldr r0, =push_ret_pc
-    _PRINT_R1
     
     add mic1MAR, mic1SP, #4         @jsr5 MAR = SP = SP + 1; wr
     mov mic1SP, mic1MAR
@@ -661,12 +668,9 @@ ret:
                                     @ret5 NOP
     mov mic1PC, mic1MDR             @ret6 PC = MDR; fetch
     ldr r1, =memory
-    ldrb mic1MBRU, [r1, +mic1MAR]        @fetching
-    ldrsb mic1MBR, [r1, +mic1MAR]        @fetching
+    ldrb mic1MBRU, [r1, +mic1PC]    @fetching
+    ldrsb mic1MBR, [r1, +mic1PC]    @fetching
     
-    mov r1, #0x69
-    ldr r0, =here
-    _PRINT_R1
     
     add mic1MAR, mic1MAR, #4        @ret7 MAR = MAR + 1; rd
     _RD_
