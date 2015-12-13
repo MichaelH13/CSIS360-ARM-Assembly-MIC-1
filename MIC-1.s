@@ -85,6 +85,9 @@ flags: .asciz "r"
 filename: .asciz "loadstore"
 
 .balign 4
+push_ret_pc: .asciz "\npush_ret_pc: %d\n"
+
+.balign 4
 memory: .skip 4096
 
 .text
@@ -302,7 +305,7 @@ skip_nl2:
  	ldr r0, =newline
     _PRINT_R1
     
-    
+branch_table:
     /* decode/execute */
     cmp mic1MBRU, #0x10
     beq bipush
@@ -423,11 +426,11 @@ idiv: @TODO NOT TESTED
     _RD_
     mov mic1H, mic1TOS              @H = TOS
     
-    mov r0, mic1H
+    mov r0, mic1H                   @Div
     mov r1, mic1MDR
     
     push {r2-r3}
-    bl __aeabi_uidiv
+    bl __aeabi_idiv
     pop {r2-r3}
     
     mov mic1TOS, r0
@@ -437,7 +440,7 @@ idiv: @TODO NOT TESTED
     b main1
 
 iand: @TODO NOT TESTED
-    sub mic1SP, mic1SP, #4                  @MAR = SP = SP - 1
+    sub mic1SP, mic1SP, #4          @MAR = SP = SP - 1
     mov mic1MAR, mic1SP
     _RD_
     mov mic1H, mic1TOS              @mic1H = TOS
@@ -525,7 +528,6 @@ iinc:
     
     mov mic1H, mic1MDR              @H = MDR
     
-    @_INC_PC_FETCH                   @PC = PC + 1; fetch
     add mic1MDR, mic1H, mic1MBR     @MDR = MBR + H; wr; goto main1
     
     pop {mic1MAR}
@@ -588,34 +590,25 @@ swap:
     b main1
     
 jsr:
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MBRU
-    ldr r0, =mbru
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
     _INC_PC_FETCH                   @Get MBRU
     
     lsl mic1MBRU, mic1MBRU, #2      @Multiply MBRU by 4
     
     add mic1SP, mic1SP, #4
     add mic1SP, mic1SP, mic1MBRU    @jsr1 SP = SP + MBRU + 1
-    @@@@@@@@@@@@@@@@
-    @mov r1, mic1SP
-    @ldr r0, =sp
-    @_PRINT_R1
-    @@@@@@@@@@@@@@@@
+    
     mov mic1MDR, mic1CPP            @jsr2 MDR = CPP
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MDR
-    ldr r0, =old_lr
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
+    
     
     mov mic1CPP, mic1SP             @jsr3 MAR = CPP = SP; wr
     mov mic1MAR, mic1CPP             
     _WR_
     
     add mic1MDR, mic1PC, #4         @jsr4 MDR = PC + 4
+    
+    mov r1, mic1MDR
+    ldr r0, =push_ret_pc
+    _PRINT_R1
     
     add mic1MAR, mic1SP, #4         @jsr5 MAR = SP = SP + 1; wr
     mov mic1SP, mic1MAR
@@ -645,70 +638,17 @@ jsr:
     orr mic1MBRU, mic1H, mic1MBRU   @jsr17 PC = PC - 4 + (H OR MBRU)
     add mic1PC, mic1PC, mic1MBRU
     
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1PC
-    ldr r0, =pc
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MBRU
-    ldr r0, =mbru
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
     
     sub mic1PC, mic1PC, #5
     
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1PC
-    ldr r0, =pc
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MBRU
-    ldr r0, =mbru
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1CPP
-    ldr r0, =cpp
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1SP
-    ldr r0, =sp
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    sub mic1PC, mic1PC, #1
-    _INC_PC_FETCH
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MBRU
-    ldr r0, =mbru
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
     
     b main1                         @jsr18 goto main1
     
 ret:
-    push {r0-r12}
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1SP
-    ldr r0, =result2
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1MBRU
-    ldr r0, =result2
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    @@@@@@@@@@@@@@@@
-    mov r1, mic1CPP
-    ldr r0, =result2
-    _PRINT_R1
-    @@@@@@@@@@@@@@@@
-    pop {r0-r12}
     
     cmp mic1CPP, #0                 @ret0 check for ret from main 
     beq end                         @(i.e. CPP==0) & exit, ELSE
+    
     
     mov mic1MAR, mic1CPP            @ret1 MAR = CPP; rd
     _RD_
@@ -717,10 +657,16 @@ ret:
     
     add mic1MAR, mic1MAR, #4        @ret4 MAR = MAR + 1; rd
     _RD_
+    
                                     @ret5 NOP
     mov mic1PC, mic1MDR             @ret6 PC = MDR; fetch
-    ldrb mic1MBRU, [mic1MAR]        @fetching
-    ldrsb mic1MBR, [mic1MAR]        @fetching
+    ldr r1, =memory
+    ldrb mic1MBRU, [r1, +mic1MAR]        @fetching
+    ldrsb mic1MBR, [r1, +mic1MAR]        @fetching
+    
+    mov r1, #0x69
+    ldr r0, =here
+    _PRINT_R1
     
     add mic1MAR, mic1MAR, #4        @ret7 MAR = MAR + 1; rd
     _RD_
@@ -732,11 +678,11 @@ ret:
     mov mic1MDR, mic1TOS            @ret10 MDR = TOS; wr
     _WR_
     
-    b main1
+    b branch_table
 
 /* External */
 .global printf
 .global fopen
 .global fread
 .global fclose
-.global __aeabi_uidiv
+.global __aeabi_idiv
