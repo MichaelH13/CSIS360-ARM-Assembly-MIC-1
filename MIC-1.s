@@ -248,8 +248,8 @@ idiv:
     
     mov mic1H, mic1TOS              @ H = TOS
     
-    mov r0, mic1H                   @ MDR = TOS = H / MDR; wr; goto main1
-    mov r1, mic1MDR
+    mov r1, mic1H                   @ MDR = TOS = H / MDR; wr; goto main1
+    mov r0, mic1MDR
     push {r2-r3}                    @ Preserve registers
     bl __aeabi_idiv                 @ call our div fuction
     pop {r2-r3}                     @ Preserve registers
